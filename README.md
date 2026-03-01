@@ -4,9 +4,8 @@
 
 Built for students and job seekers who can't afford coaching, Alex conducts real-time video interviews, tracks your body language through pose detection, catches distractions in your environment, and delivers honest verbal feedback the moment you're done — all for free.
 
-[![Demo Video](https://img.youtube.com/vi/mScWgvHX-As/maxresdefault.jpg)](https://www.youtube.com/watch?v=mScWgvHX-As)
 
-[🎥 Watch Demo](https://www.youtube.com/watch?v=mScWgvHX-As) | [📝 Read Blog Post](blog-link) | [💻 GitHub](https://github.com/Yamini26284)
+[🎥 Watch Demo](https://www.youtube.com/watch?v=mScWgvHX-As) | [📝 Read Blog Post](https://dev.to/yamini_priya_4f7873b3baf2/from-zero-to-live-ai-agent-how-i-built-an-interview-coach-with-vision-agents-sdk-58hd) | [💻 GitHub](https://github.com/Yamini26284)
 
 ---
 

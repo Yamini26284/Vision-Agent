@@ -139,15 +139,22 @@ That's it. The UI launches `main.py` automatically in the background when you cl
 
 ```
 ai-interview-coach/
+├── .venv/
+├── .env                      # API keys (not committed)
+├── .gitignore
+├── .python-version
+├── agent.pid                 # Auto-generated, tracks running agent process
 ├── app.py                    # Streamlit UI — setup form and live call embed
-├── main.py                   # Vision Agents agent — interview logic and lifecycle
 ├── interview_config.json     # Written by app.py, read by main.py
-├── interview_transcript.json # Live transcript, polled by Report.py
+├── main.py                   # Vision Agents agent — interview logic and lifecycle
+├── packages.txt
+├── pyproject.toml            # UV dependencies
+├── README.md
+├── requirements.txt
+├── uv.lock
 ├── yolo11n-pose.pt           # YOLO pose model
 ├── yolo11n.pt                # YOLO object detection model
-├── pyproject.toml            # UV dependencies
-├── .env                      # API keys (not committed)
-└── README.md
+└── yolo26n-pose.pt           # YOLO pose model (larger)
 ```
 
 ---

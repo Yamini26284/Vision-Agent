@@ -14,12 +14,21 @@ from vision_agents.plugins import getstream, gemini, ultralytics
 import streamlit as st
 
 # Cloud vs Local key management
-if "GEMINI_API_KEY" in st.secrets:
-    os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
-    os.environ["STREAM_API_KEY"] = st.secrets["STREAM_API_KEY"]
-    os.environ["STREAM_API_SECRET"] = st.secrets["STREAM_API_SECRET"]
-else:
+import streamlit as st
+import os
+from dotenv import load_dotenv
+
+# --- SAFER CLOUD VS LOCAL KEY MANAGEMENT ---
+try:
+    # Streamlit Cloud: Try to access secrets
+    if "GEMINI_API_KEY" in st.secrets:
+        os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+        os.environ["STREAM_API_KEY"] = st.secrets["STREAM_API_KEY"]
+        os.environ["STREAM_API_SECRET"] = st.secrets["STREAM_API_SECRET"]
+except Exception:
+    # Local VSCode: If st.secrets causes an error, fall back to .env
     load_dotenv()
+# -------------------------------------------
 
 class CleanProcessor(ultralytics.YOLOPoseProcessor):
     """Runs YOLO silently — no lines drawn on video."""

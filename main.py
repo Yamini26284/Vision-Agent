@@ -11,7 +11,15 @@ from vision_agents.core.agents import AgentLauncher
 from vision_agents.plugins import getstream, gemini, ultralytics
 
 # Load your .env file
-load_dotenv()
+import streamlit as st
+
+# Cloud vs Local key management
+if "GEMINI_API_KEY" in st.secrets:
+    os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+    os.environ["STREAM_API_KEY"] = st.secrets["STREAM_API_KEY"]
+    os.environ["STREAM_API_SECRET"] = st.secrets["STREAM_API_SECRET"]
+else:
+    load_dotenv()
 
 class CleanProcessor(ultralytics.YOLOPoseProcessor):
     """Runs YOLO silently — no lines drawn on video."""

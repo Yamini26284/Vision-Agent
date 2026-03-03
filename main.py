@@ -10,9 +10,6 @@ from vision_agents.core import Agent, User, Runner
 from vision_agents.core.agents import AgentLauncher
 from vision_agents.plugins import getstream, gemini, ultralytics
 
-# Load your .env file
-import streamlit as st
-
 # Cloud vs Local key management
 import streamlit as st
 import os
@@ -28,7 +25,7 @@ try:
 except Exception:
     # Local VSCode: If st.secrets causes an error, fall back to .env
     load_dotenv()
-# -------------------------------------------
+
 
 class CleanProcessor(ultralytics.YOLOPoseProcessor):
     """Runs YOLO silently — no lines drawn on video."""
@@ -51,7 +48,7 @@ async def create_agent(**kwargs) -> Agent:
     except (FileNotFoundError, json.JSONDecodeError):
         config = {"role": "Candidate", "level": "Mid-Level", "content": "General Interview", "num_questions": 3}
 
-    # 2. UPDATED INSTRUCTIONS: Moves from PDF focus to Live Discussion
+    
     dynamic_instructions = f"""
 You are Alex, a Senior Technical Recruiter conducting a real professional interview.
 You are interviewing for a {config.get('level')} {config.get('role')} position.
@@ -297,16 +294,16 @@ GENERAL RULES (apply at all times)
         edge=getstream.Edge(region="ap-south-1"),
         agent_user=User(name="Agent- Senior AI Recruiter"),
         
-        # Hides the green/red lines on Alex's screen for a professional look
+        
         processors=[
-    CleanProcessor(model_path="yolo11n-pose.pt"),  # pose, no lines
-    CleanProcessor(model_path="yolo11n.pt"),        # object detection, no boxes
+    CleanProcessor(model_path="yolo11n-pose.pt"), 
+    CleanProcessor(model_path="yolo11n.pt"),        
 ],
         
         
         instructions=dynamic_instructions,
         
-        # Gemini handles STT/TTS internally, so we don't need deepgram.STT()
+        
         llm=gemini.Realtime(model="gemini-2.5-flash-native-audio-preview-12-2025"),
         
     )

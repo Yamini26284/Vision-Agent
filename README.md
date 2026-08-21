@@ -1,78 +1,123 @@
 # 🎯 Vision Agent
 
-> An AI interviewer that doesn't just listen to your answers. It watches you.
+> A real-time multimodal AI agent that doesn't just listen to your interview answers — it watches you.
 
-Built for students and job seekers who can't afford coaching, Alex conducts real-time video interviews, tracks your body language through pose detection, catches distractions in your environment, and delivers honest verbal feedback the moment you're done — all for free.
+**Alex** is an AI interview coach built as a real-time agent, not a chatbot with a video call bolted on. It runs a live video interview, fuses three concurrent signal streams — spoken audio, live video, and structured vision-model output — into one coherent context, reasons over all of it simultaneously, and acts: asking follow-up questions, calling out a phone that just appeared on camera, adjusting tone when eye contact drops, and closing with a scored, spoken debrief the moment the interview ends.
 
+This repo is a case study in **agent orchestration for real-time multimodal systems**: how to keep perception (vision models), reasoning (an LLM), and action (voice, scoring, UI) in sync when everything is happening live, with no room for batch processing or retries.
 
-[🎥 Watch Demo](https://www.youtube.com/watch?v=mScWgvHX-As) | [📝 Read Blog Post](https://dev.to/yamini_priya_4f7873b3baf2/from-zero-to-live-ai-agent-how-i-built-an-interview-coach-with-vision-agents-sdk-58hd) | [💻 GitHub](https://github.com/Yamini26284)
+---
+
+## 🎬 Watch It Work
+
+**[▶ Watch the full demo](https://www.youtube.com/watch?v=mScWgvHX-As)**
+
+[![Watch the Demo](https://img.youtube.com/vi/mScWgvHX-As/0.jpg)](https://www.youtube.com/watch?v=mScWgvHX-As)
+
+*Written breakdown of the build:* [dev.to post](https://dev.to/yamini_priya_4f7873b3baf2/from-zero-to-live-ai-agent-how-i-built-an-interview-coach-with-vision-agents-sdk-58hd)
 
 ---
 
 ## 🌟 What Alex Does
 
-- **🎙️ Conducts real interviews** — greets you, asks role-specific questions, follows up on vague answers, and waits patiently like a real recruiter
-- **👁️ Watches your body language** — tracks eye contact, posture, and nervousness levels through YOLO pose detection in real time
-- **📱 Monitors your environment** — detects mobile phones, extra screens, and additional people using YOLO object detection and reacts mid-interview
-- **💬 Gives live verbal feedback** — after the final question, Alex delivers structured feedback on your strengths, areas to improve, and body language
-- **📊 Generates a performance report** — every answer scored on Clarity, Relevance and Depth, with engagement metrics and a final recommendation on screen the moment you say goodbye
+- **🎙️ Conducts a real interview** — greets you, asks role-specific questions generated from a job description or resume, follows up on vague answers, and paces itself like a human recruiter rather than firing off a fixed script
+- **👁️ Reads body language live** — tracks eye contact, posture, and nervousness signals through YOLO pose detection, streamed into the agent's reasoning in real time
+- **📱 Monitors the environment** — detects phones, extra screens, or additional people via YOLO object detection and reacts *mid-interview*, not in a post-hoc report
+- **💬 Gives spoken, structured feedback** — after the final question, Alex delivers verbal feedback on strengths, gaps, and body language, no waiting for a report to generate
+- **📊 Scores the session** — every answer rated on Clarity, Relevance, and Depth, combined with engagement metrics into a final recommendation the moment the call ends
 
 ---
 
-## 🎬 Demo
+## 🏗️ System Architecture
 
-[![Watch the Demo](https://img.youtube.com/vi/mScWgvHX-As/0.jpg)](https://www.youtube.com/watch?v=mScWgvHX-As)
+```
+Candidate (webcam + mic)
+         ↓
+    Stream Edge Network (WebRTC, ap-south-1)
+         ↓
+    Vision Agents SDK  ←── orchestration layer
+         ├── YOLOPoseProcessor (yolo11n-pose.pt)
+         │       └── eye contact, posture, nervousness → pushed as live state
+         ├── YOLOProcessor (yolo11n.pt)
+         │       └── phone / extra screens / extra people → pushed as live state
+         └── Gemini Realtime (multimodal LLM)
+                 └── consumes video + audio + processor state concurrently
+                         ↓
+              reasons over all three streams → decides next action:
+              ask a question, follow up, flag a distraction,
+              adjust tone, or move to feedback
+                         ↓
+         spoken feedback + structured scoring on session end
+```
+
+**Why an orchestration SDK instead of hand-rolled glue code:** the alternative to Vision Agents here is manually managing a WebRTC session, polling two YOLO models, buffering their output, and injecting it into an LLM call on some schedule — while also streaming audio and video to that same LLM without breaking sync. Vision Agents collapses this into a processor abstraction: each vision model's output is exposed as *state*, and that state is automatically merged into the LLM's live context on every turn. The agent code only has to define what the processors detect and what the LLM should do with that information — not how the data gets there.
+
+---
+
+## 🧠 Design Decisions & Tradeoffs
+
+**Single realtime multimodal model vs. a pipelined stack (STT → LLM → TTS)**
+A traditional pipeline (speech-to-text, then LLM, then text-to-speech) adds latency at every hop and throws away non-verbal signal — tone, hesitation, timing. Gemini Realtime processes audio and video natively and speaks back directly, which is what makes the interview feel like a live conversation instead of a call-and-response bot. The tradeoff: fewer knobs to tune per-stage, and you're locked into a specific model family (few models support bidirectional native audio streaming — see Engineering Challenges below).
+
+**Local YOLO inference vs. a cloud vision API**
+Running `yolo11n` and `yolo11n-pose` locally keeps per-frame latency predictable and avoids a second network round-trip stacked on top of the live video call. The cost is that the app is CPU/GPU-bound on whatever machine runs it, which is the main reason this currently runs locally rather than on a thin cloud instance.
+
+**Pushing processor state into LLM context vs. a separate rules engine**
+An earlier approach considered hard-coding rules like "if phone detected → say X." Instead, YOLO output is exposed as state and the LLM decides *when and how* to react, based on interview phase and conversational context. This makes the agent's behavior contextual (it won't interrupt mid-sentence to flag a phone) rather than reflexive, at the cost of being less deterministic to test.
+
+**Subclassing processors instead of using default visualization**
+The SDK's default `YOLOPoseProcessor`/`YOLOProcessor` draw skeleton overlays on the video feed. For an interview product, showing the user a skeleton is the wrong UX. Every drawing method had to be overridden in a `CleanProcessor` subclass to suppress rendering while keeping detection intact — a reminder that adapting an SDK to a product's actual UX often means overriding more than the docs first suggest.
 
 ---
 
 ## 🛠️ Tech Stack
 
 | Component | Technology |
-|-----------|------------|
-| **Agent Runtime** | Vision Agents SDK |
-| **Video Infrastructure** | Stream (ap-south-1, Mumbai) |
-| **Pose Detection** | YOLO yolo11n-pose.pt |
-| **Object Detection** | YOLO yolo11n.pt |
-| **Vision + Audio LLM** | Google Gemini Realtime |
+|---|---|
+| **Agent Runtime / Orchestration** | Vision Agents SDK |
+| **Video Infrastructure** | Stream (WebRTC, ap-south-1) |
+| **Pose Detection** | YOLO — `yolo11n-pose.pt` |
+| **Object Detection** | YOLO — `yolo11n.pt` |
+| **Vision + Audio Reasoning** | Google Gemini Realtime (native bidirectional audio) |
 | **UI & Report Dashboard** | Streamlit |
 | **Language** | Python 3.12 |
 | **Package Manager** | UV |
 
 ---
 
-## 🏗️ Architecture
+## 🐛 Engineering Challenges & How They Were Solved
 
-```
-Candidate (webcam + mic)
-         ↓
-    Stream Edge Network (ap-south-1)
-         ↓
-    Vision Agents SDK  ←── Orchestrates everything
-         ├── YOLOPoseProcessor (yolo11n-pose.pt)
-         │       └── Eye contact, posture, nervousness → passed as state to Gemini
-         ├── YOLOPoseProcessor (yolo11n.pt)
-         │       └── Phone, extra screens, people detected → passed as state to Gemini
-         └── Gemini Realtime (VideoLLM)
-                 └── Sees video + hears audio simultaneously
-                         ↓
-              Reacts in real time — asks questions,
-              follows up, addresses distractions,
-              monitors body language
-                         ↓
-         gives real time feedback, suggestions to improve and room for more discussions.
-```
+**Bidirectional audio only works on specific model versions**
+Standard Gemini models don't support live, two-way audio streaming. Only `gemini-2.5-flash-native-audio-preview-12-2025` handled it correctly — a reminder that with realtime multimodal APIs, the model version isn't a minor detail, it's a hard capability boundary.
 
-**Why Vision Agents SDK?**
-Vision Agents is the orchestration layer that makes all of this possible. Without it, wiring YOLO pose detection, YOLO object detection, and Gemini Realtime together with a live video call would take weeks. Vision Agents handles the entire pipeline — processor state flows automatically into the LLM's context, so Gemini knows what YOLO sees without any manual piping.
+**Suppressing the pose skeleton overlay**
+The SDK renders detection results onto the video by default. Fixed by subclassing both YOLO processors and overriding every drawing method — detection logic stays intact, rendering is fully suppressed.
+
+**Reliable phone detection mid-call**
+Detection accuracy depended heavily on lighting and phone orientation. Solved with an explicit `ACTIVE VISUAL SCANNING` directive in the agent's dynamic instructions, keeping the object-detection processor's attention weighted correctly during the live conversation rather than treating it as a background check.
+
+**Latency**
+Deployed on Stream's `ap-south-1` (Mumbai) edge for lowest latency to the primary user base; this is a config value, not a hard dependency, so it can be repointed for other regions.
+
+**Stuck process state**
+Long-running agent processes tracked via `agent.pid` could get orphaned on abnormal exit. Handled with a reset flow in the UI that clears the pid and process state without a manual shell command.
+
+---
+
+## 🎓 Key Learnings (Agent Engineering)
+
+- **Processor state is the real integration point.** The value of an orchestration SDK isn't the API surface — it's that vision-model output becomes something the LLM can reason over natively, without hand-written glue.
+- **Instructions are the product.** A well-structured system prompt with explicit phases, priorities, and tone rules is the difference between an agent that feels like a form with a voice and one that feels like a person paying attention.
+- **Determinism vs. context-awareness is a real tradeoff.** Letting the LLM decide *when* to act on a signal (rather than hard-coded rules) makes the agent feel natural but makes behavior harder to unit test — worth designing for explicitly, not discovering by accident.
+- **Realtime multimodal capability is model-specific, not model-family-generic.** Don't assume "Gemini supports X" — check the exact model version against the exact capability you need.
 
 ---
 
 ## 🚀 Running Locally
 
-> ⚠️ This project runs locally only. It requires persistent processes, WebRTC connections, and YOLO inference that cloud platforms do not support.
+> ⚠️ This project runs locally only. It requires persistent processes, WebRTC connections, and local YOLO inference that most cloud platforms don't support out of the box.
 
 ### Prerequisites
-
 - Python 3.12+
 - Webcam and microphone
 - Google Gemini API key
@@ -83,8 +128,8 @@ Vision Agents is the orchestration layer that makes all of this possible. Withou
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/Yamini26284/ai-interview-coach.git
-cd ai-interview-coach
+git clone https://github.com/Yamini26284/Vision-Agent.git
+cd Vision-Agent
 ```
 
 **2. Install UV if you don't have it**
@@ -103,7 +148,7 @@ uv add vision-agents "vision-agents[getstream,gemini,ultralytics]"
 ```
 
 **4. Create your `.env` file**
-```env
+```
 GEMINI_API_KEY=your_gemini_api_key
 STREAM_API_KEY=your_stream_api_key
 STREAM_API_SECRET=your_stream_api_secret
@@ -117,35 +162,31 @@ Get your keys:
 ```bash
 streamlit run app.py
 ```
+The UI launches `main.py` automatically in the background when you click **Start My Interview**.
 
-That's it. The UI launches `main.py` automatically in the background when you click **Start My Interview**.
-
----
-
-## 📖 How to Use
-
-1. Open `http://localhost:8501` in your browser
+### How to Use
+1. Open `http://localhost:8501`
 2. Enter your **Target Role** and **Seniority Level**
-3. Choose how Alex should prepare — paste a Job Description, paste your Resume, or let AI decide
+3. Provide a Job Description, a Resume, or let Alex decide
 4. Set the number of questions (1–10)
 5. Click **🎙️ Start My Interview with Alex**
-6. The interview call opens automatically — just say **Hello** to begin
-7. Complete your interview and debrief with Alex
-8. Click **Report** in the sidebar to view your full performance analysis
+6. Say **Hello** to begin
+7. Complete the interview and debrief with Alex
+8. Click **Report** in the sidebar for the full performance breakdown
 
 ---
 
 ## 📁 Project Structure
 
 ```
-ai-interview-coach/
+Vision-Agent/
 ├── .venv/
 ├── .env                      # API keys (not committed)
 ├── .gitignore
 ├── .python-version
-├── agent.pid                 # Auto-generated, tracks running agent process
-├── app.py                    # Streamlit UI — setup form and live call embed
-├── interview_config.json     # Written by app.py, read by main.py
+├── agent.pid                 # auto-generated, tracks the running agent process
+├── app.py                    # Streamlit UI — setup form + live call embed
+├── interview_config.json     # written by app.py, read by main.py
 ├── main.py                   # Vision Agents agent — interview logic and lifecycle
 ├── packages.txt
 ├── pyproject.toml            # UV dependencies
@@ -154,50 +195,17 @@ ai-interview-coach/
 ├── uv.lock
 ├── yolo11n-pose.pt           # YOLO pose model
 ├── yolo11n.pt                # YOLO object detection model
-└── yolo26n-pose.pt           # YOLO pose model (larger)
+└── yolo26n-pose.pt           # YOLO pose model (larger variant)
 ```
-
----
-
-## 🐛 Troubleshooting
-
-**Agent not speaking / silent on call**
-- Make sure you're using `gemini-2.5-flash-native-audio-preview-12-2025` — standard Gemini models don't support bidirectional audio streaming
-
-**Skeleton lines visible on video**
-- The `CleanProcessor` subclass in `main.py` suppresses drawing — make sure it's applied to both YOLO processors
-
-**Phone not detected mid-interview**
-- Ensure `yolo11n.pt` is present in the project root
-- Hold the phone clearly visible, front-facing in good lighting
-- The `ACTIVE VISUAL SCANNING` instruction in `dynamic_instructions` must be present
-
-**High latency**
-- You're on `ap-south-1` (Mumbai) by default — best for India
-- Close other bandwidth-heavy applications
-- Check your internet connection speed
-
-**`agent.pid` file stuck / can't start new session**
-- Click **Reset & Start Fresh** on the home page
-- Or manually delete `agent.pid` from the project folder
-
----
-
-## 🎓 Key Learnings
-
-- **Processor state is the bridge** — Vision Agents passes YOLO output directly into Gemini's context. Understanding this unlocks the full power of the SDK
-- **Instructions are the product** — a well-structured prompt with phases, priorities and tone rules is the difference between an agent that feels human and one that feels like a form with a voice
-- **Subclass when the SDK doesn't expose what you need** — overriding every drawing method on `YOLOPoseProcessor` was the only way to cleanly suppress the skeleton overlay
-- **Realtime models are specific** — not all Gemini models support native audio streaming. Model version matters enormously
 
 ---
 
 ## 🔮 Future Plans
 
 - [ ] Session history and progress tracking over time
-- [ ] Answer content analysis beyond body language
-- [ ] Multiple interview modes — technical, behavioural, case study
-- [ ] Cloud deployment via Railway + Supabase
+- [ ] Answer content analysis beyond body language signals
+- [ ] Multiple interview modes — technical, behavioral, case study
+- [ ] Cloud deployment (Railway + Supabase)
 - [ ] Mobile support
 - [ ] Multi-language interviews
 
@@ -205,11 +213,10 @@ ai-interview-coach/
 
 ## 🙏 Acknowledgments
 
-- [Vision Agents SDK](https://github.com/GetStream/vision-agents) by Stream — the framework that made this possible in 4 days
-- [Google Gemini](https://ai.google.dev/) — for real-time multimodal understanding
-- [Ultralytics YOLO](https://github.com/ultralytics/ultralytics) — for pose and object detection
-- [Stream](https://getstream.io) — for live video infrastructure
-- Built for [Vision Possible: Agent Protocol — WeMakeDevs Hackathon 2026](https://www.wemakedevs.org)
+- [Vision Agents SDK](https://github.com/GetStream/vision-agents) by Stream — the orchestration framework this agent is built on
+- [Google Gemini](https://ai.google.dev/) — real-time multimodal reasoning
+- [Ultralytics YOLO](https://github.com/ultralytics/ultralytics) — pose and object detection
+- [Stream](https://getstream.io) — live video infrastructure
 
 ---
 
@@ -223,4 +230,4 @@ ai-interview-coach/
 
 ## ⭐ Support
 
-If this project helped you or inspired you, give it a ⭐ — it means a lot.
+If this project is useful or interesting to you, a star helps it reach more people.
